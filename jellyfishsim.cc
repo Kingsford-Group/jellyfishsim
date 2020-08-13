@@ -16,11 +16,14 @@ std::vector<merhash> readKmerCounts(size_t size, int argc, char* argv[]) {
 
   matrix.randomize_pseudo_inverse();
   res.reserve(argc);
-
   for(int i = 0; i < argc; ++i) {
     res.emplace_back(size, 2 * jellyfish::mer_dna::k(), 6, 100,
                      jellyfish::RectangularBinaryMatrix(matrix)); // somehow we need to copy matrix
-    auto& hash = res.back();
+  }
+
+#pragma omp parallel for
+  for(int i = 0; i < argc; ++i) {
+    auto& hash = res[i];
     igzstream in(argv[i]);
     if(!in.good()) {
       std::cerr << "Error openinig file '" << argv[i] << '\'' << std::endl;
@@ -112,14 +115,24 @@ int main(int argc, char *argv[]) {
   jellyfish::mer_dna::k(klen); // Set k-mer length for Jellyfish
   std::vector<merhash> counts = readKmerCounts(size, argc - 3, argv + 3);
 
-  // TODO: parallelize that with OMP
+  std::vector<std::vector<double>> matrix(counts.size());
+  for(size_t i = 0; i < counts.size(); ++i) {
+    matrix[i].resize(counts.size());
+    matrix[i][i] = 1.0;
+  }
+
   for(size_t i = 0; i < counts.size() - 1; ++i) {
     #pragma omp parallel for
     for(size_t j = i + 1; j < counts.size(); ++j) {
-      auto sim = computeSimilarity(counts[i], counts[j]);
-      #pragma omp critical
-      std::cout << i << ' ' << j << ' ' << sim << '\n';
+      const auto sim = computeSimilarity(counts[i], counts[j]);
+      matrix[i][j] = matrix[j][i] = sim;
     }
+  }
+
+  for(auto& row : matrix) {
+    for(double elt : row)
+      std::cout << elt << ' ';
+    std::cout << '\n';
   }
 
   return 0;
