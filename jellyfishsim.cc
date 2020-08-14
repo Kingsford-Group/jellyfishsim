@@ -7,41 +7,61 @@
 
 
 typedef jellyfish::large_hash::unbounded_array<jellyfish::mer_dna> merhash;
+typedef jellyfish::large_hash::region_iterator_base<merhash> hashiterator;
+
+struct hashinfo {
+  merhash hash;
+  double  norm;
+  // somehow we need to copy matrix
+  hashinfo(size_t size, int value_len, jellyfish::RectangularBinaryMatrix matrix)
+    : hash(size, 2 * jellyfish::mer_dna::k(), value_len, 100, std::move(matrix))
+    , norm(0.0)
+  { }
+};
 
 // Read every file in argv (files containing kmer/count pairs, assumed
 // gziped), and store each in its own mer hash
-std::vector<merhash> readKmerCounts(size_t size, int argc, char* argv[]) {
-  std::vector<merhash> res;
-  jellyfish::RectangularBinaryMatrix matrix(jellyfish::ceilLog2(size), jellyfish::mer_dna::k());
-
+std::vector<hashinfo> readKmerCounts(size_t size, int argc, char* argv[]) {
+  std::vector<hashinfo>              res;
+  jellyfish::RectangularBinaryMatrix matrix(jellyfish::ceilLog2(size), 2*jellyfish::mer_dna::k());
   matrix.randomize_pseudo_inverse();
   res.reserve(argc);
-  for(int i = 0; i < argc; ++i) {
-    res.emplace_back(size, 2 * jellyfish::mer_dna::k(), 6, 100,
-                     jellyfish::RectangularBinaryMatrix(matrix)); // somehow we need to copy matrix
-  }
+  for(int i = 0; i < argc; ++i)
+    res.emplace_back(size, 6, matrix);
 
 #pragma omp parallel for
   for(int i = 0; i < argc; ++i) {
-    auto& hash = res[i];
+    auto& hash = res[i].hash;
     igzstream in(argv[i]);
     if(!in.good()) {
+      #pragma omp critical
       std::cerr << "Error openinig file '" << argv[i] << '\'' << std::endl;
       exit(1);
     }
 
     jellyfish::mer_dna mer;
     uint64_t           value;
+    double             norm = 0.0;
+    size_t             nb = 0;
     while(true) {
       in >> mer >> value;
       if(in.eof())
         break;
       if(!in.good()) {
+        #pragma omp critical
         std::cerr << "Error reading file '" << argv[i] << '\'' << std::endl;
         exit(1);
       }
-      hash.add(mer, value);
+      if(!hash.add(mer, value)) {
+        #pragma omp critical
+        std::cerr << "Failed to insert kmer " << size << ' ' << mer << ' ' << value
+                  << ' ' << nb << " from '" << argv[i] << "'\n";
+        exit(1);
+      }
+      norm += value * value;
+      ++nb;
     }
+    res[i].norm = std::sqrt(norm);
   }
 
   return res;
@@ -58,7 +78,7 @@ int comp(IT& it1, IT& it2) {
     return 1;
   } else if(it1.key() < it2.key()) {
     return -1;
-  } else if(it1.key() < it2.key()) {
+  } else if(it1.key() > it2.key()) {
     return 1;
   } else {
     return 0;
@@ -67,32 +87,37 @@ int comp(IT& it1, IT& it2) {
 
 // Compute cosine-similarity from two mer hashes built using the same
 // hash matrix (hence follow same k-mer order).
-double computeSimilarity(const merhash& h1, const merhash& h2) {
-  auto it1 = h1.begin(), it2 = h2.begin();
-  const auto end1 = h1.end(), end2 = h2.end();
+double computeSimilarity(const hashinfo& h1, const hashinfo& h2) {
+  hashiterator it1(&h1.hash, 0, h1.hash.size());
+  hashiterator it2(&h2.hash, 0, h2.hash.size());
 
-  double norm1 = 0.0, norm2 = 0.0, product = 0.0;
-  while(it1 != end1 && it2 != end2) {
+  double product = 0.0;
+  bool   done    = !it1.next() || !it2.next(); // Pull first element
+
+  while(!done) {
+    std::cerr << "> " << it1.key() << ' ' << it2.key() << ' ' << it1.val() << ' ' << it2.val() << ' ' << it1.id() << ':' << it1.oid() << ' ' << it2.id() << ':' << it2.oid() << '\n';
     switch(comp(it1, it2)) {
     case 0:
       product += it1.val() * it2.val();
-      norm1   += it1.val() * it1.val();
-      norm2   += it2.val() * it2.val();
-      ++it1;
-      ++it2;
+      std::cerr << it1.key() << ' ' << it1.val() << ' ' << it2.val() << ' ' << it1.id() << ':' << it1.oid() << ' ' << it2.id() << ':' << it2.oid() << '\n';
+      done = !it1.next() || !it2.next();
       break;
     case -1:
-      norm1 += it1.val() * it1.val();
-      ++it1;
+      // std::cerr << product << ' ' <<  it1.pos() << ' ' << it2.pos() << ' ' << it1.key() << " < " << it2.key() << std::endl;
+      std::cerr << it1.key() << ' ' << it1.val() << ' ' << 0 << ' ' << it1.id() << ':' << it1.oid() << ' ' << "-:-" << '\n';;
+      done = !it1.next();
       break;
     case 1:
-      norm2 += it2.val() * it2.val();
-      ++it2;
+      // std::cerr << product << ' ' <<  it1.pos() << ' ' << it2.pos() << ' ' << it1.key() << " > " << it2.key() << std::endl;
+      std::cerr << it2.key() << ' ' << 0 << ' ' << it2.val() << ' ' << "-:-" << ' ' << it2.id() << ':' << it2.oid() << '\n';
+      done = !it2.next();
       break;
     }
   }
+  // #pragma omp critical
+  //   std::cerr << product << ' ' << h1.norm << ' ' << h2.norm << '\n';
 
-  return product / (std::sqrt(norm1 * norm2));
+  return product / (h1.norm * h2.norm);
 }
 
 int main(int argc, char *argv[]) {
@@ -113,7 +138,7 @@ int main(int argc, char *argv[]) {
   }
 
   jellyfish::mer_dna::k(klen); // Set k-mer length for Jellyfish
-  std::vector<merhash> counts = readKmerCounts(size, argc - 3, argv + 3);
+  std::vector<hashinfo> counts = readKmerCounts(size, argc - 3, argv + 3);
 
   std::vector<std::vector<double>> matrix(counts.size());
   for(size_t i = 0; i < counts.size(); ++i) {
