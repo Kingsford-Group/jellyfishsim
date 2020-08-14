@@ -64,6 +64,11 @@ inline size_t triangle(size_t i, size_t j = 0) {
   return i * (i + 1) / 2 + j;
 }
 
+inline void invTriangle(size_t index, size_t& i, size_t& j) {
+  i = std::floor((std::sqrt(8*index + 1) - 1.0) / 2);
+  j = index - triangle(i);
+}
+
 double computeSimilarity(const hashinfo& mers1, const hashinfo& mers2) {
   auto it1 = mers1.mers.begin(), it2 = mers2.mers.begin();
   const auto end1 = mers1.mers.end(), end2 = mers2.mers.end();
@@ -99,15 +104,16 @@ int main(int argc, char *argv[]) {
   jellyfish::mer_dna::k(klen); // Set k-mer length for Jellyfish
   std::vector<hashinfo> counts = readKmerCounts(argc - 2, argv + 2);
 
-  std::vector<double> matrix(triangle(counts.size() + 1));
-  matrix[0] = 1.0;
-  for(size_t i = 1; i < counts.size(); ++i) {
-    matrix[triangle(i, i)] = 1.0;
-    #pragma omp parallel for
-    for(size_t j = 0; j < i; ++j) {
-      const double sim = computeSimilarity(counts[i], counts[j]);
-      matrix[triangle(i, j)] = sim;
-    }
+  std::vector<double> matrix(triangle(counts.size()));
+
+#pragma omp parallel for
+  for(size_t k = 0; k < matrix.size(); ++k) {
+    size_t i, j;
+    invTriangle(k, i, j);
+    if(i != j)
+      matrix[k] = computeSimilarity(counts[i], counts[j]);
+    else
+      matrix[k] = 1.0;
   }
 
   auto elt = matrix.cbegin();
