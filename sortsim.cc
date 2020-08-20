@@ -2,6 +2,11 @@
 #include <cstdlib>
 #include <vector>
 
+#include <fstream>
+#include <iterator>
+#include <iomanip>
+#include <string>
+
 #include <jellyfish/jellyfish.hpp>
 #include <gzstream.h>
 
@@ -22,13 +27,14 @@ struct hashinfo {
   }
 };
 
-std::vector<hashinfo> readKmerCounts(int argc, char* argv[]) {
+std::vector<hashinfo> readKmerCounts(std::vector<std::string> argv) {
+  int argc = argv.size();
   std::vector<hashinfo> res(argc);
 
 #pragma omp parallel for
   for(int i = 0; i < argc; ++i) {
     auto& mers = res[i].mers;
-    igzstream in(argv[i]);
+    igzstream in(argv[i].c_str());
     if(!in.good()) {
       #pragma omp critical
       std::cerr << "Error openinig file '" << argv[i] << '\'' << std::endl;
@@ -56,6 +62,24 @@ std::vector<hashinfo> readKmerCounts(int argc, char* argv[]) {
   }
 
   return res;
+}
+
+std::vector<std::string> readDatasetsFile(char *filename) {
+  std::vector<std::string> list_datasets;
+
+  std::ifstream datasets_file(filename);
+  if (!datasets_file.is_open()) {
+    std::cerr << "Error openinig file '" << filename << '\'' << std::endl;
+    exit(1);
+  }
+
+  std::string dataset;
+  while (datasets_file >> dataset) {
+    list_datasets.push_back(dataset);
+  }
+  datasets_file.close();
+
+  return list_datasets;
 }
 
 // Position in a vector representing a lower triangular matrix (with
@@ -91,7 +115,7 @@ double computeSimilarity(const hashinfo& mers1, const hashinfo& mers2) {
 
 int main(int argc, char *argv[]) {
   if(argc < 3) {
-    std::cerr << "Usage: " << argv[0] << " klen file.gz..." << std::endl;
+    std::cerr << "Usage: " << argv[0] << " klen list_datasets_file" << std::endl;
     exit(1);
   }
 
@@ -101,8 +125,10 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
+  std::vector<std::string> list_datasets = readDatasetsFile(argv[2]);
+
   jellyfish::mer_dna::k(klen); // Set k-mer length for Jellyfish
-  std::vector<hashinfo> counts = readKmerCounts(argc - 2, argv + 2);
+  std::vector<hashinfo> counts = readKmerCounts(list_datasets);
 
   std::vector<double> matrix(triangle(counts.size()));
 
@@ -116,11 +142,22 @@ int main(int argc, char *argv[]) {
       matrix[k] = 1.0;
   }
 
+  std::vector<std::vector<double> > sim_matrix( counts.size(), std::vector<double> (counts.size()));
+
   auto elt = matrix.cbegin();
   for(size_t i = 0; i < counts.size(); ++i) {
-    for(size_t j = 0; j <= i; ++j, ++elt)
-      std::cout << *elt << ' ';
-    std::cout << '\n';
+    for(size_t j = 0; j <= i; ++j, ++elt) {
+      sim_matrix[i][j] = *elt;
+      sim_matrix[j][i] = *elt;
+    }
+  }
+
+  std::ofstream output_file("similarity_matrix");
+  output_file << std::fixed << std::setprecision(9);
+  std::ostream_iterator<double> output_iterator(output_file, " ");
+  for(const auto& vt : sim_matrix) {
+    std::copy(vt.cbegin(), vt.cend(), output_iterator);
+    output_file << '\n';
   }
 
   return 0;
