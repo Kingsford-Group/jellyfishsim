@@ -1,7 +1,7 @@
 # Overview
 
-This repository contains the program to compute the similarity matrix of k-mer counts vectors for a list of datasets, and also contains the programs to perform the seeded-chunking and to compute the Hausdorff distances used in the Hierarchical Representative Set Selection. The Hierarchical Representative Set Selection can be found in this repository:
-   
+This repository contains the program to compute the similarity matrix of k-mer counts vectors for a list of datasets, and also contains the programs to perform the seeded-chunking and to compute the Hausdorff distances used in the Hierarchical Representative Set Selection. The Hierarchical Representative Set Selection can be found in this repository: https://github.com/Kingsford-Group/hierrepsetselection
+ 
 
 # Installation
 
@@ -40,6 +40,6 @@ Both the classical Hausdorff distance and the partial Hausdorff distance are com
     hausdorff <klen> <full_set_datasets_file> <rep_set_datasets_file> <q>
 ```
 
-where `<klen>` is the k-mer size (e.g. 17), `<full_set_datasets_file>` is a file containing the names of all the datasets' k-mer counts files (full-path) in the original full set, `<rep_set_datasets_file>` is a file containing the names of the selected representative datasets' k-mer counts files, and `<q>` is a parameter used in the partial Hausdorff distance: `q = 1 – K / |X|` where |X| is the size of the original full set, and K is for using the Kth largest value (counting from the minimum) as the partial Hausdorff distance. All these these k-mer counts files are gzipped.
+where `<klen>` is the k-mer size (e.g. 17), `<full_set_datasets_file>` is a file containing the names of all the datasets' k-mer counts files (full-path) in the original full set, `<rep_set_datasets_file>` is a file containing the names of the selected representative datasets' k-mer counts files, and `<q>` is a parameter used in the partial Hausdorff distance: `q = 1 – K / |X|` where |X| is the size of the original full set, and K is for using the Kth largest value (counting from the minimum) as the partial Hausdorff distance. All these k-mer counts files are gzipped.
 
 
