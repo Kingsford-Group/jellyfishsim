@@ -23,7 +23,7 @@ This program can be used for any applications. The cosine similarity is the simi
 where `<klen>` is the k-mer size (e.g. 17), and `<list_datasets_file>` is a file containing the names of all the datasets' k-mer counts files (full-path), one filename per line. Note that these k-mer counts files are gzipped.
 
 
-## Perform the seeded-chunking\n(used in the Hierarchical Representative Set Selection)
+## Perform the seeded-chunking <br> (used in the Hierarchical Representative Set Selection)
 
 The seeded-chunking method produces chunks as separately as possible from the original set of datasets. Use the following command to perform the seeded-chunking:
 ```
@@ -33,7 +33,7 @@ The seeded-chunking method produces chunks as separately as possible from the or
 where `<klen>` is the k-mer size (e.g. 17), `<full_set_datasets_file>` is a file containing the names of all the datasets' k-mer counts files (full-path) in the original full set to be chunked (one filename per line), `<rand_set_datasets_file>` is a file containing the names of randomly selected datasets' k-mer counts files (these datasets are selected randomly from the original full set and will be used for selecting seeds), `<num_chunks>` is the number of chunks, and `<chunk_size>` is the size of each chunk. All these these k-mer counts files are gzipped.
 
 
-## Compute the Hausdorff distances\n(used in the Hierarchical Representative Set Selection)
+## Compute the Hausdorff distances <br> (used in the Hierarchical Representative Set Selection)
 
 Both the classical Hausdorff distance and the partial Hausdorff distance are computed.  Use the following command to compute the Hausdorff distances:
 ```
